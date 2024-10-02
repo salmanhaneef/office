@@ -17,7 +17,11 @@ from flask import Flask, send_file
 app = Flask(__name__)
 
 # Enable CORS and allow credentials to be shared with frontend
-CORS(app, supports_credentials=True)
+
+
+# Enable CORS with credentials support
+CORS(app, supports_credentials=True, origins=["http://localhost:5173"])
+
 
 # Secret key for session management
 app.secret_key = "Company1"
@@ -30,6 +34,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)  # Session life
 
 # MongoDB connection URI
 client = MongoClient("mongodb+srv://salman:12SAlm@cluster0.lq7um.mongodb.net/company1?retryWrites=true&w=majority&appName=Cluster0")
+# client = MongoClient("mongodb://localhost:27017/project")
 db = client.get_database('total_records')
 records = db.register
 Line = namedtuple('Line', 'Commercial_Package_Policy Premium_Policy Premium_Policy1')
@@ -49,45 +54,47 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-@app.route('/', methods=['POST', 'GET'])
-def index():
-    # If the user is already logged in, redirect to the logged_in route
-    if "email" in session:
-        return redirect(url_for("logged_in"))
+@app.route('/signup', methods=['POST'])  
+def signup():  
+    # Use request.get_json() to handle JSON content  
+    data = request.get_json()  
 
-    if request.method == "POST":
-        user = request.json.get("fullname")
-        email = request.json.get("email")
-        password1 = request.json.get("password1")
-        password2 = request.json.get("password2")
+    user = data.get("fullname")  
+    email = data.get("email")  
+    password1 = data.get("password1")  
+    password2 = data.get("password2")  
 
-        # Basic validation
-        if not user or not email or not password1 or not password2:
-            return jsonify({"message": "All fields are required!"}), 400
+    # Basic validation  
+    if not user or not email or not password1 or not password2:  
+        return jsonify({"message": "All fields are required!"}), 400  
 
-        # Check if the user or email already exists
-        user_found = records.find_one({"name": user})
-        email_found = records.find_one({"email": email})
+    # Check if the user or email already exists  
+    user_found = records.find_one({"name": user})  
+    email_found = records.find_one({"email": email})  
 
-        if user_found:
-            return jsonify({"message": "There already is a user by that name"}), 400
-        if email_found:
-            return jsonify({"message": "This email already exists in database"}), 400
-        if password1 != password2:
-            return jsonify({"message": "Passwords should match!"}), 400
+    if user_found:  
+        return jsonify({"message": "There already is a user by that name"}), 400  
+    if email_found:  
+        return jsonify({"message": "This email already exists in the database"}), 400  
+    if password1 != password2:  
+        return jsonify({"message": "Passwords should match!"}), 400  
 
-        # Hash the password and store user data
-        hashed = bcrypt.hashpw(password2.encode('utf-8'), bcrypt.gensalt())
-        user_input = {'name': user, 'email': email, 'password': hashed}
-        records.insert_one(user_input)
+    # Hash the password  
+    hashed = bcrypt.hashpw(password1.encode('utf-8'), bcrypt.gensalt())  
 
-        # Set session
-        session["email"] = email
-        session.permanent = True  # Make the session permanent so it adheres to the session lifetime
-        return jsonify({"success": True}), 200
+    # Insert user into MongoDB  
+    user_input = {'name': user, 'email': email, 'password': hashed}  
+    
+    try:  
+        records.insert_one(user_input)  
+    except Exception as e:  
+        return jsonify({"message": "An error occurred while registering the user.", "error": str(e)}), 500  
 
-    return jsonify({"message": "Invalid request method"}), 405
+    # Set session for the user  
+    session["email"] = email  
+    session.permanent = True  
 
+    return jsonify({"success": True, "message": "User registered successfully!"}), 200
 @app.route("/login", methods=["POST"])
 def login():
     # If the user is already logged in, redirect to the logged_in route
@@ -1166,5 +1173,5 @@ def view_file1(filename):
 
 if __name__ == '__main__':
     os.makedirs('uploads', exist_ok=True)  # Create the uploads directory if it doesn't exist
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True)
 
